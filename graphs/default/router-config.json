@@ -1,0 +1,41 @@
+{
+  "configVersion": "navigo-kenya-router-v1",
+  "streetRoutingTimeout": "PT5S",
+  "server": {
+    "apiProcessingTimeout": "PT15S"
+  },
+  "routingDefaults": {
+    "locale": "en_KE",
+    "numItineraries": 6,
+    "maxTransfers": 4,
+    "searchWindow": "PT6H",
+    "walkSpeed": 1.33,
+    "walkReluctance": 2.2,
+    "waitReluctance": 1.0,
+    "walkBoardCost": 300,
+    "transferSlack": "PT2M",
+    "boardSlack": "PT1M",
+    "alightSlack": "PT0S",
+    "boardSlackForMode": {
+      "BUS": "PT2M",
+      "COACH": "PT15M",
+      "RAIL": "PT25M",
+      "AIRPLANE": "PT45M"
+    },
+    "alightSlackForMode": {
+      "RAIL": "PT10M",
+      "AIRPLANE": "PT15M"
+    },
+    "carDropoffTime": "PT2M"
+  },
+  "transit": {
+    "maxNumberOfTransfers": 12,
+    "maxSearchWindow": "PT24H",
+    "dynamicSearchWindow": {
+      "minTransitTimeCoefficient": 0.5,
+      "minWaitTimeCoefficient": 0.5,
+      "minWindow": "PT1H",
+      "stepMinutes": 15
+    }
+  }
+}

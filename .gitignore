@@ -1,0 +1,15 @@
+# Ignore heavy OSM extracts, GTFS zips, and compiled OTP graphs
+graphs/**/*.osm.pbf
+graphs/**/*.gtfs.zip
+graphs/**/graph.obj*
+graphs/**/report/
+
+# Keep the JSON config files tracked
+!graphs/**/build-config.json
+!graphs/**/router-config.json
+!graphs/**/otp-config.json
+
+# Environment overrides & OS files
+.env
+.DS_Store
+Thumbs.db

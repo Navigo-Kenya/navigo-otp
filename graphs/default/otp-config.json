@@ -1,0 +1,9 @@
+{
+  "otpFeatures": {
+    "ActuatorAPI": true,
+    "GtfsGraphQlApi": true,
+    "ParallelRouting": true,
+    "SandboxAPIGeocoder": true,
+    "TransferConstraints": true
+  }
+}
