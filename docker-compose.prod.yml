@@ -8,11 +8,18 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      - JAVA_OPTS=-Xmx6G -Xms1G -XX:+UseG1GC
+      # 20GB heap with ZGC ensures sub-millisecond GC pauses under high routing traffic
+      - JAVA_OPTS=-Xmx20G -Xms4G -XX:+UseZGC
     volumes:
       - /var/otp/graphs/default:/var/opentripplanner
     command: --load
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 24G
+        reservations:
+          memory: 16G
     networks:
       - navigo_net
 
@@ -22,10 +29,15 @@ services:
     container_name: navigo-otp-build
     profiles: ["build"]
     environment:
-      - JAVA_OPTS=-Xmx6G -Xms1G -XX:+UseG1GC
+      # Generous heap for parsing large national OSM extracts & multi-feed GTFS zips
+      - JAVA_OPTS=-Xmx20G -Xms4G -XX:+UseG1GC
     volumes:
       - /var/otp/graphs/default:/var/opentripplanner
     command: --build --save
+    deploy:
+      resources:
+        limits:
+          memory: 24G
     networks:
       - navigo_net
 
