@@ -2,7 +2,7 @@
 
 [![OpenTripPlanner](https://img.shields.io/badge/OpenTripPlanner-2.4.0-1565C0?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMSAxNy45M1Y0LjA3YzMuOTQuNDkgNyAzLjg1IDcgNy45M3MtMy4wNiA3LjQ0LTcgNy45M3oiLz48L3N2Zz4=)](https://www.opentripplanner.org)
 [![Docker](https://img.shields.io/badge/Docker-required-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com)
-[![Java](https://img.shields.io/badge/JVM-17%2B%20%C2%B7%206%20GB%2B%20heap-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org)
+[![Java](https://img.shields.io/badge/JVM-17%2B%20%C2%B7%2020%20GB%2B%20heap-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org)
 [![GTFS](https://img.shields.io/badge/GTFS-Multi--Feed-43A047?style=flat-square)](https://gtfs.org)
 [![OSM](https://img.shields.io/badge/OpenStreetMap-Kenya-7EBC6F?style=flat-square&logo=openstreetmap&logoColor=white)](https://www.openstreetmap.org)
 [![Region](https://img.shields.io/badge/Region-Kenya%20%E2%86%92%20Global-FF6F00?style=flat-square)](https://navigo.co.ke)

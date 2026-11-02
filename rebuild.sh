@@ -8,7 +8,7 @@ set -euo pipefail
 
 OTP_DIR="/var/otp"
 OTP_DATA="${OTP_DIR}/graphs/default"
-COMPOSE="docker compose -f ${OTP_DIR}/docker-compose.yml --project-name otp"
+COMPOSE="docker compose -f ${OTP_DIR}/docker-compose.prod.yml --project-name otp"
 
 GRAPH="${OTP_DATA}/graph.obj"
 GRAPH_BAK="${OTP_DATA}/graph.obj.bak"
