@@ -11,7 +11,7 @@
 
 The **Navigo OTP Engine** is the standalone transit routing core of the [Navigo](https://navigo.co.ke) platform. Decoupled from `navigo-api`, it runs [OpenTripPlanner 2.4](https://www.opentripplanner.org) in Docker, loaded with modular Kenyan transit feeds (urban Matatus + intercity buses, SGR trains, and domestic flights) alongside the national street network (OpenStreetMap), and answers every "get me from A to B" request in real time.
 
-Navigo launches across **Kenya** combining complex urban matatu networks like Nairobi and Nakuru with national intercity corridors and is designed to scale to any new city or region simply by adding a new `*-urban.gtfs.zip` feed or regional OSM extract.
+Navigo launches across **Kenya**—combining complex urban matatu networks like Nairobi and Nakuru with national intercity corridors—and is designed to scale to any new city or region simply by adding a new `*-urban.gtfs.zip` feed or regional OSM extract.
 
 ---
 
@@ -34,43 +34,57 @@ Navigo launches across **Kenya** combining complex urban matatu networks like Na
 `navigo-otp` runs as an independent Docker Compose stack (`/var/otp`) separate from the Laravel backend (`navigo-api`):
 
 1. **Resource Isolation:** OTP graph compilation and in-memory routing are JVM-intensive. Isolating OTP in its own Compose stack prevents graph rebuilds from starving PHP-FPM, PostgreSQL, or Redis.
-2. **Deployment Flexibility:** `navigo-otp` can run on the same host as `navigo-api` (communicating over an internal Docker network or `127.0.0.1:8080`) or on a dedicated high-memory VPS (receiving GTFS archives via SCP/SSH).
-3. **Standalone `docker-compose.yml`:**
+2. **Deployment Flexibility:** `navigo-otp` can run on the same host as `navigo-api` (communicating over the shared `navigo_net` Docker network) or on a dedicated high-memory VPS.
+3. **Standalone `docker-compose.yml` (Tuned for 32 GB RAM Server):**
 
 ```yaml
 version: "3.9"
 
 services:
+  # ── OpenTripPlanner (serve) ───────────────────────────────────────────────
   otp:
     image: opentripplanner/opentripplanner:2.4.0
     container_name: navigo-otp
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      - JAVA_OPTS=-Xmx6G -Xms1G -XX:+UseG1GC
+      # 20GB heap with ZGC ensures sub-millisecond GC pauses under high routing traffic
+      - JAVA_OPTS=-Xmx20G -Xms4G -XX:+UseZGC
     volumes:
       - /var/otp/graphs/default:/var/opentripplanner
     command: --load
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 24G
+        reservations:
+          memory: 16G
     networks:
-      - otp_net
+      - navigo_net
 
+  # ── OpenTripPlanner (graph builder, on-demand) ────────────────────────────
   otp-build:
     image: opentripplanner/opentripplanner:2.4.0
     container_name: navigo-otp-build
     profiles: ["build"]
     environment:
-      - JAVA_OPTS=-Xmx6G -Xms1G -XX:+UseG1GC
+      # Generous heap for parsing large national OSM extracts & multi-feed GTFS zips
+      - JAVA_OPTS=-Xmx20G -Xms4G -XX:+UseG1GC
     volumes:
       - /var/otp/graphs/default:/var/opentripplanner
     command: --build --save
+    deploy:
+      resources:
+        limits:
+          memory: 24G
     networks:
-      - otp_net
+      - navigo_net
 
 networks:
-  otp_net:
-    name: navigo_otp_net
-    driver: bridge
+  navigo_net:
+    name: navigo_net
+    external: true
 ```
 
 ---
@@ -81,7 +95,7 @@ OTP 2.x has exactly **two operating modes**. Understanding both is required.
 
 ### Mode 1 `--build --save` (graph compilation)
 
-OTP reads the raw OSM and multi-feed GTFS input files from `/var/otp/graphs/default/`, computes a unified street + transit routing graph (including cross-feed transfers between urban matatus and intercity terminals), and serialises the result to `graph.obj`. This is a one-time, offline, blocking operation the HTTP server is **not available** inside the builder container while it runs.
+OTP reads the raw OSM and multi-feed GTFS input files from `/var/otp/graphs/default/`, computes a unified street + transit routing graph (including cross-feed transfers between urban matatus and intercity terminals), and serialises the result to `graph.obj`. This is a one-time, offline, blocking operation—the HTTP server is **not available** inside the builder container while it runs.
 
 ```
 /var/otp/graphs/default/
@@ -122,7 +136,7 @@ Everything OTP reads or writes lives on the host in `/var/otp/graphs/default/` (
 
 ### `kenya-latest.osm.pbf`
 
-The full Kenyan street network from [Geofabrik](https://download.geofabrik.de/africa/kenya.html). OTP uses it to model every pedestrian and cycling leg of a trip footpaths, crossings, road widths, turn restrictions and to link transit stops from all GTFS feeds to physical streets. It changes infrequently; update it when significant new infrastructure is added (e.g. a new BRT corridor or major pedestrian bridge). A full graph rebuild is required after replacement.
+The full Kenyan street network from [Geofabrik](https://download.geofabrik.de/africa/kenya.html). OTP uses it to model every pedestrian and cycling leg of a trip—footpaths, crossings, road widths, turn restrictions—and to link transit stops from all GTFS feeds to physical streets. It changes infrequently; update it when significant new infrastructure is added (e.g. a new BRT corridor or major pedestrian bridge). A full graph rebuild is required after replacement.
 
 For a single-city local test instance (e.g. Nairobi only), you can extract a smaller `.pbf` with [osmium](https://osmcode.org/osmium-tool/) to reduce build time:
 
@@ -146,7 +160,7 @@ Each `.gtfs.zip` archive is a standard GTFS feed containing 9 files (plus an opt
 |------|----------|
 | `agency.txt` | Transit operators (Navigo, SACCOs, intercity coach operators, Kenya Railways, airlines) |
 | `stops.txt` | Bus / matatu stages, SGR stations, and airports with GPS coordinates |
-| `routes.txt` | Named routes and their colour coding |
+| `routes.txt` | Named routes and colour coding |
 | `trips.txt` | Individual trip patterns per route |
 | `stop_times.txt` | Arrival and departure times per trip |
 | `calendar.txt` | Service day patterns (Mon–Fri, weekends, public holidays) |
@@ -158,7 +172,7 @@ Each `.gtfs.zip` archive is a standard GTFS feed containing 9 files (plus an opt
 
 ### `graph.obj`
 
-The compiled binary graph typically 250–900 MB depending on the number of active regional feeds. Produced by `--build --save`; loaded by `--load`. Binary format, not human-readable.
+The compiled binary graph—typically 250–900 MB depending on the number of active regional feeds. Produced by `--build --save`; loaded by `--load`. Binary format, not human-readable.
 
 ---
 
@@ -172,7 +186,7 @@ Use this when `graph.obj` does not yet exist, or after replacing the OSM extract
 sudo mkdir -p /var/otp/graphs/default
 sudo chown -R $USER:$USER /var/otp
 
-# Full Kenya (recommended   covers all urban & intercity feeds)
+# Full Kenya (recommended — covers all urban & intercity feeds)
 curl -L [https://download.geofabrik.de/africa/kenya-latest.osm.pbf](https://download.geofabrik.de/africa/kenya-latest.osm.pbf) \
      -o /var/otp/graphs/default/kenya-latest.osm.pbf
 
@@ -196,24 +210,24 @@ docker compose --profile build run --rm otp-build
 
 # Option B: Standalone Docker CLI (Linux server)
 docker run --rm \
-  -e JAVA_OPTS="-Xmx6G -Xms1G -XX:+UseG1GC" \
+  -e JAVA_OPTS="-Xmx20G -Xms4G -XX:+UseG1GC" \
   -v /var/otp/graphs/default:/var/opentripplanner \
   opentripplanner/opentripplanner:2.4.0 --build --save
 
 # Option C: Standalone Docker CLI (Windows PowerShell)
 docker run --rm `
-  -e JAVA_OPTS="-Xmx6G" `
-  -v "D:\React\nairobi-otp\graphs\default:/var/opentripplanner" `
+  -e JAVA_OPTS="-Xmx20G" `
+  -v "C:\navigo\navigo-otp\graphs\default:/var/opentripplanner" `
   opentripplanner/opentripplanner:2.4.0 --build --save
 
 # Option D: Standalone Docker CLI (Windows cmd.exe)
 docker run --rm ^
-  -e JAVA_OPTS="-Xmx6G" ^
-  -v "D:\React\nairobi-otp\graphs\default:/var/opentripplanner" ^
+  -e JAVA_OPTS="-Xmx20G" ^
+  -v "C:\navigo\navigo-otp\graphs\default:/var/opentripplanner" ^
   opentripplanner/opentripplanner:2.4.0 --build --save
 ```
 
-Watch the output OTP will log OSM parsing, GTFS parsing for each `.gtfs.zip` archive, street-to-transit graph linkage, and finally `"Graph written"`. The container exits with code `0` on success and writes `graph.obj` to `/var/otp/graphs/default/graph.obj`.
+Watch the output—OTP will log OSM parsing, GTFS parsing for each `.gtfs.zip` archive, street-to-transit graph linkage, and finally `"Graph written"`. The container exits with code `0` on success and writes `graph.obj` to `/var/otp/graphs/default/graph.obj`.
 
 ### 4. Start the serve container
 
@@ -252,18 +266,18 @@ curl -s [http://127.0.0.1:8080/otp](http://127.0.0.1:8080/otp) | jq '{version: .
 Required after any `.gtfs.zip` or `.osm.pbf` change.
 
 ```bash
-# Preferred   Linux / macOS / WSL helper script
+# Preferred — Linux / macOS / WSL helper script
 chmod +x /var/otp/rebuild.sh && /var/otp/rebuild.sh
 
-# Manual steps   Docker Compose (any OS)
+# Manual steps — Docker Compose (any OS)
 cd /var/otp
 docker compose stop otp
 docker compose --profile build run --rm otp-build
 docker compose up -d otp
 
-# Manual steps   Standalone Docker CLI one-liner (Linux)
+# Manual steps — Standalone Docker CLI one-liner (Linux)
 docker stop navigo-otp || true && \
-docker run --rm -e JAVA_OPTS="-Xmx6G" -v /var/otp/graphs/default:/var/opentripplanner opentripplanner/opentripplanner:2.4.0 --build --save && \
+docker run --rm -e JAVA_OPTS="-Xmx20G" -v /var/otp/graphs/default:/var/opentripplanner opentripplanner/opentripplanner:2.4.0 --build --save && \
 docker start navigo-otp
 ```
 
@@ -306,21 +320,21 @@ Every step produces a log entry in `otp_logs` (visible in the console activity l
 
 ```dotenv
 OTP_DEPLOY_DRIVER=local
-OTP_DATA_PATH=D:\React\nairobi-otp\graphs\default
-OTP_BUILD_CMD='docker stop navigo-otp & docker run --rm -e JAVA_OPTS="-Xmx6G" -v "D:\React\nairobi-otp\graphs\default:/var/opentripplanner" opentripplanner/opentripplanner:2.4.0 --build --save && docker start navigo-otp'
+OTP_DATA_PATH=/var/otp/graphs/default
+OTP_BUILD_CMD='docker stop navigo-otp & docker run --rm -e JAVA_OPTS="-Xmx20G" -v "/var/otp/graphs/default:/var/opentripplanner" opentripplanner/opentripplanner:2.4.0 --build --save && docker start navigo-otp'
 OTP_HEALTH_CHECK_URL=[http://127.0.0.1:8080/otp](http://127.0.0.1:8080/otp)
 OTP_HEALTH_CHECK_RETRIES=30
 OTP_HEALTH_CHECK_DELAY=10
 ```
 
-> **Shell syntax note:** The Windows `OTP_BUILD_CMD` uses `cmd.exe` syntax where `&` means "run next command regardless of exit code." On Linux, `&` means "run in background" a completely different semantic. **On a Linux server, always set `OTP_BUILD_CMD` to the path of `/var/otp/rebuild.sh`**, never copy the Windows cmd string.
+> **Shell syntax note:** The Windows `OTP_BUILD_CMD` uses `cmd.exe` syntax where `&` means "run next command regardless of exit code." On Linux, `&` means "run in background"—a completely different semantic. **On a Linux server, always set `OTP_BUILD_CMD` to the path of `/var/otp/rebuild.sh`**, never copy the Windows cmd string.
 
 ### Same-host production server (Decoupled stacks on one Linux VPS)
 
 ```dotenv
 OTP_DEPLOY_DRIVER=local
 OTP_DATA_PATH=/var/otp/graphs/default
-OTP_BUILD_CMD='/var/otp/rebuild.sh'
+OTP_BUILD_CMD=/var/otp/rebuild.sh
 OTP_HEALTH_CHECK_URL=http://navigo-otp:8080/otp
 OTP_HEALTH_CHECK_RETRIES=30
 OTP_HEALTH_CHECK_DELAY=10
@@ -354,8 +368,7 @@ Navigo is built to expand across Kenya and East Africa:
    | Single city (Nairobi only) | `-Xmx4G -Xms512m -XX:+UseG1GC` | Fits on 8 GB RAM host |
    | Kenya national (Multi-urban + Intercity) | `-Xmx6G -Xms1G -XX:+UseG1GC` | Fits on 8–16 GB RAM host |
    | East Africa multi-country | `-Xmx10G -Xms2G -XX:+UseG1GC` | Requires 16 GB+ RAM host |
-   | High-concurrency / 32 GB RAM server (Sequential build) | `-Xmx24G -Xms4G -XX:+UseZGC` | Stop `otp` before running `otp-build` so only one 24 GB JVM runs at a time (leaves ~6–8 GB for OS & off-heap overhead) |
-   | High-concurrency / 32 GB RAM server (Zero-downtime build) | Serve: `-Xmx12G -XX:+UseZGC`<br>Build: `-Xmx14G -XX:+UseG1GC` | Allows `otp-build` to compile in the background while `otp` stays online (26 GB combined peak) |
+   | High-concurrency / 32 GB RAM server (Sequential build) | `-Xmx20G -Xms4G -XX:+UseZGC` | Stop `otp` before running `otp-build` so only one 20 GB JVM runs at a time (leaves ~12 GB for OS & off-heap overhead) |
 
 5. **Separate instances per region** _(optional)_: For high-traffic multi-country deployments, run one OTP container per country behind a routing proxy that selects the instance based on origin/destination coordinates.
 
@@ -363,14 +376,14 @@ Navigo is built to expand across Kenya and East Africa:
 
 ## Production deployment
 
-### Recommended server spec
+### Recommended server spec (32 GB RAM Hetzner CPX32 / CCX33)
 
 | Component | Minimum | Recommended | High-Capacity |
 |-----------|---------|-------------|---------------|
-| RAM | 8 GB | 16 GB | 32 GB |
-| CPU | 4 cores | 8 cores | 8–16 cores |
-| Disk | SSD, 15 GB | NVMe SSD, 30 GB | NVMe SSD, 60 GB |
-| OS | Ubuntu 22.04 LTS | Ubuntu 22.04 / 24.04 LTS | Ubuntu 24.04 LTS |
+| RAM | 8 GB | 16 GB | **32 GB** |
+| CPU | 4 cores | 8 cores | **8–16 cores** |
+| Disk | SSD, 15 GB | NVMe SSD, 30 GB | **NVMe SSD, 60 GB** |
+| OS | Ubuntu 22.04 LTS | Ubuntu 22.04 / 24.04 LTS | **Ubuntu 24.04 LTS** |
 
 ### Setup checklist
 
@@ -405,13 +418,13 @@ docker logs navigo-otp
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `OutOfMemoryError` | Heap too small | Increase `JAVA_OPTS=-Xmx6G` (or higher) in `docker-compose.yml` |
+| `OutOfMemoryError` | Heap too small | Increase `JAVA_OPTS=-Xmx20G` in `docker-compose.yml` |
 | `graph.obj not found` | Build did not complete | Check build logs; rerun `--build --save` |
 | `Duplicate stop/trip ID` | ID collision across multiple `.gtfs.zip` files | Ensure each zip defines a unique `feed_id` in `feed_info.txt` |
 | `Address already in use: 8080` | Port conflict | `netstat -tulpn \| grep 8080` and kill the process |
 | Container exits immediately | Corrupted `graph.obj` | Delete `graph.obj` and rebuild |
 
-### Build fails   no input data
+### Build fails — no input data
 
 OTP aborts if it finds no `.zip` (GTFS) or no `.pbf` (OSM) in `/var/otp/graphs/default/`. Confirm all files exist before building:
 
@@ -455,7 +468,7 @@ curl -s [http://127.0.0.1:8080/otp](http://127.0.0.1:8080/otp) | jq '.serverVers
 stat /var/otp/graphs/default/graph.obj
 ```
 
-If the timestamps don't match, the serve container restarted without a new graph check the `otp_build` log entry in the console activity log for errors.
+If the timestamps don't match, the serve container restarted without a new graph—check the `otp_build` log entry in the console activity log for errors.
 
 ### Force a full rebuild from scratch
 
