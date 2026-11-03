@@ -4,6 +4,11 @@ graphs/**/*.gtfs.zip
 graphs/**/graph.obj*
 graphs/**/report/
 
+
+graphs/default/*.obj
+graphs/default/*.pbf
+graphs/default/*.zip
+
 # Keep the JSON config files tracked
 !graphs/**/build-config.json
 !graphs/**/router-config.json
