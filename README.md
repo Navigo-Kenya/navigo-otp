@@ -123,7 +123,7 @@ graph.obj  ──►  [--load]  ──►  HTTP :8080
 
 - **API:** the REST `/otp/routers/default/plan` endpoint no longer exists (404). Clients use the **GTFS GraphQL API** at `POST /otp/gtfs/v1` (`planConnection`); navigo-api's `OtpClient` does this. `GET /otp` still answers for health checks.
 - **Config format:** `router-config.json` uses nested preferences (`walk.speed`, `walk.reluctance`, `walk.boardCost`, `bicycle.triangle`…). `maxTransfers`, `matchBusRoutesToStreets` and `stationTransfers` were removed. `searchWindow` is **PT30M**: the old PT6H made transit searches take 25–46 s.
-- **Isochrones:** the travel-time/isochrone API was removed; walk-sheds now come from Valhalla.
+- **Isochrones:** the travel-time/isochrone API was removed; walk-sheds now come from Valhalla (`navigo-valhalla`).
 - **Graphs:** a 2.4 `graph.obj` can't be loaded by 2.10, so rebuild after upgrading.
 
 ## Elevation (DEM)
@@ -145,17 +145,9 @@ Building the Kenya graph with these tiles takes ~16 min and 6 GB of heap.
 
 > **Known limit:** GLO-30 is a *surface* model (it includes buildings and trees), so climbs are overstated in built-up areas. A bare-earth model would fix it; see the API README.
 
-## Valhalla (car routing)
+## Car routing lives in navigo-valhalla
 
-`navigo-valhalla` (`ghcr.io/valhalla/valhalla-scripted:3.9.1`, port 8002, same `navigo_net` network) builds its routing tiles from the same Kenya extract on first start:
-
-```bash
-mkdir -p valhalla && cp graphs/default/kenya-latest.osm.pbf valhalla/
-docker compose up -d valhalla            # first start builds the tiles (several minutes)
-curl http://127.0.0.1:8002/status        # ready when this returns JSON
-```
-
-navigo-api uses it for car routes (`VALHALLA_URL=http://navigo-valhalla:8002`): fastest, real alternatives, and "No tolls" when the fastest uses the Nairobi Expressway. It also serves walk-shed isochrones. To refresh after a new OSM extract, delete `valhalla/valhalla_tiles.tar` and restart the container.
+Car routes (alternatives, toll avoidance) and walk-shed isochrones run on Valhalla in its own project, [`navigo-valhalla`](../navigo-valhalla), built from the same Kenya OSM extract. Keep the two extracts in sync when you refresh the map data.
 
 ## Data directory
 

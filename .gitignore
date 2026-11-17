@@ -23,5 +23,3 @@ Thumbs.db
 graphs/**/*.tif
 dem-cache/
 
-# Valhalla tiles and OSM copy: built locally, not versioned
-valhalla/
