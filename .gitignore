@@ -18,3 +18,8 @@ graphs/default/*.zip
 .env
 .DS_Store
 Thumbs.db
+
+# Elevation (DEM) tiles: downloaded, not versioned
+graphs/**/*.tif
+dem-cache/
+

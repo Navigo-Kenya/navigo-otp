@@ -1,7 +1,7 @@
 services:
   # ── OpenTripPlanner (serve) ───────────────────────────────────────────────
   otp:
-    image: opentripplanner/opentripplanner:2.4.0
+    image: opentripplanner/opentripplanner:2.10.0
     container_name: navigo-otp
     ports:
       - "127.0.0.1:8080:8080"
@@ -23,7 +23,7 @@ services:
 
   # ── OpenTripPlanner (graph builder, on-demand) ────────────────────────────
   otp-build:
-    image: opentripplanner/opentripplanner:2.4.0
+    image: opentripplanner/opentripplanner:2.10.0
     container_name: navigo-otp-build
     profiles: ["build"]
     environment:
@@ -38,6 +38,7 @@ services:
           memory: 24G
     networks:
       - navigo_net
+
 
 networks:
   navigo_net:
