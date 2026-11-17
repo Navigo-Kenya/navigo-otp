@@ -8,6 +8,9 @@
     "numItineraries": 8,
     "searchWindow": "PT30M",
     "streetRoutingTimeout": "PT5S",
+    "itineraryFilters": {
+      "removeItinerariesWithSameRoutesAndStops": true
+    },
     "transferPenalty": 0,
     "waitReluctance": 1.0,
     "transferSlack": "PT2M",
