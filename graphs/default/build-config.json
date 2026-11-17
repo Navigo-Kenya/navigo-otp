@@ -1,18 +1,19 @@
 {
-  "configVersion": "navigo-kenya-2.4-v1",
+  "configVersion": "navigo-kenya-2.10-v1",
   "transitModelTimeZone": "Africa/Nairobi",
   "osmDefaults": {
     "timeZone": "Africa/Nairobi"
   },
   "maxTransferDuration": "PT30M",
   "maxStopToShapeSnapDistance": 250.0,
-  "matchBusRoutesToStreets": false,
-  "stationTransfers": true,
   "areaVisibility": true,
   "embedRouterConfig": true,
   "dataImportReport": true,
   "gtfsDefaults": {
     "blockBasedInterlining": true,
     "maxInterlineDistance": 200
+  },
+  "demDefaults": {
+    "elevationUnitMultiplier": 1.0
   }
 }

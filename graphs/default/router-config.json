@@ -1,41 +1,46 @@
 {
-  "configVersion": "navigo-kenya-router-v1",
-  "streetRoutingTimeout": "PT5S",
+  "configVersion": "navigo-kenya-router-v3",
   "server": {
     "apiProcessingTimeout": "PT15S"
   },
   "routingDefaults": {
     "locale": "en_KE",
-    "numItineraries": 6,
-    "maxTransfers": 4,
-    "searchWindow": "PT6H",
-    "walkSpeed": 1.33,
-    "walkReluctance": 2.2,
+    "numItineraries": 8,
+    "searchWindow": "PT30M",
+    "streetRoutingTimeout": "PT5S",
+    "transferPenalty": 0,
     "waitReluctance": 1.0,
-    "walkBoardCost": 300,
     "transferSlack": "PT2M",
     "boardSlack": "PT1M",
     "alightSlack": "PT0S",
     "boardSlackForMode": {
-      "BUS": "PT2M",
-      "COACH": "PT15M",
-      "RAIL": "PT25M",
+      "BUS": "PT1M",
+      "TRAM": "PT1M",
+      "SUBWAY": "PT2M",
+      "RAIL": "PT4M",
+      "FERRY": "PT5M",
+      "COACH": "PT10M",
       "AIRPLANE": "PT45M"
     },
     "alightSlackForMode": {
-      "RAIL": "PT10M",
+      "RAIL": "PT2M",
+      "SUBWAY": "PT1M",
+      "FERRY": "PT2M",
       "AIRPLANE": "PT15M"
     },
-    "carDropoffTime": "PT2M"
-  },
-  "transit": {
-    "maxNumberOfTransfers": 12,
-    "maxSearchWindow": "PT24H",
-    "dynamicSearchWindow": {
-      "minTransitTimeCoefficient": 0.5,
-      "minWaitTimeCoefficient": 0.5,
-      "minWindow": "PT1H",
-      "stepMinutes": 15
+    "walk": {
+      "speed": 1.33,
+      "reluctance": 2.2,
+      "boardCost": 300
+    },
+    "bicycle": {
+      "speed": 4.5,
+      "reluctance": 2.0,
+      "triangle": {
+        "safety": 0.4,
+        "flatness": 0.3,
+        "time": 0.3
+      }
     }
   }
 }

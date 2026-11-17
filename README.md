@@ -1,6 +1,6 @@
 # Navigo · OTP Routing Engine
 
-[![OpenTripPlanner](https://img.shields.io/badge/OpenTripPlanner-2.4.0-1565C0?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMSAxNy45M1Y0LjA3YzMuOTQuNDkgNyAzLjg1IDcgNy45M3MtMy4wNiA3LjQ0LTcgNy45M3oiLz48L3N2Zz4=)](https://www.opentripplanner.org)
+[![OpenTripPlanner](https://img.shields.io/badge/OpenTripPlanner-2.10.0-1565C0?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMSAxNy45M1Y0LjA3YzMuOTQuNDkgNyAzLjg1IDcgNy45M3MtMy4wNiA3LjQ0LTcgNy45M3oiLz48L3N2Zz4=)](https://www.opentripplanner.org)
 [![Docker](https://img.shields.io/badge/Docker-required-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com)
 [![Java](https://img.shields.io/badge/JVM-17%2B%20%C2%B7%2020%20GB%2B%20heap-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org)
 [![GTFS](https://img.shields.io/badge/GTFS-Multi--Feed-43A047?style=flat-square)](https://gtfs.org)
@@ -9,7 +9,7 @@
 
 ---
 
-The **Navigo OTP Engine** is the standalone transit routing core of the [Navigo](https://navigo.co.ke) platform. Decoupled from `navigo-api`, it runs [OpenTripPlanner 2.4](https://www.opentripplanner.org) in Docker, loaded with modular Kenyan transit feeds (urban Matatus + intercity buses, SGR trains, and domestic flights) alongside the national street network (OpenStreetMap), and answers every "get me from A to B" request in real time.
+The **Navigo OTP Engine** is the standalone transit routing core of the [Navigo](https://navigo.co.ke) platform. Decoupled from `navigo-api`, it runs [OpenTripPlanner 2.10](https://www.opentripplanner.org) in Docker, loaded with modular Kenyan transit feeds (urban Matatus + intercity buses, SGR trains, and domestic flights) alongside the national street network (OpenStreetMap), and answers every "get me from A to B" request in real time.
 
 Navigo launches across **Kenya**—combining complex urban matatu networks like Nairobi and Nakuru with national intercity corridors—and is designed to scale to any new city or region simply by adding a new `*-urban.gtfs.zip` feed or regional OSM extract.
 
@@ -43,7 +43,7 @@ version: "3.9"
 services:
   # ── OpenTripPlanner (serve) ───────────────────────────────────────────────
   otp:
-    image: opentripplanner/opentripplanner:2.4.0
+    image: opentripplanner/opentripplanner:2.10.0
     container_name: navigo-otp
     ports:
       - "127.0.0.1:8080:8080"
@@ -65,7 +65,7 @@ services:
 
   # ── OpenTripPlanner (graph builder, on-demand) ────────────────────────────
   otp-build:
-    image: opentripplanner/opentripplanner:2.4.0
+    image: opentripplanner/opentripplanner:2.10.0
     container_name: navigo-otp-build
     profiles: ["build"]
     environment:
@@ -118,6 +118,44 @@ graph.obj  ──►  [--load]  ──►  HTTP :8080
 **The critical rule:** every time any `.gtfs.zip` feed changes (new routes, updated timetables, added stops), `graph.obj` must be **rebuilt** from scratch. Simply restarting the `--load` container without rebuilding serves stale transit data.
 
 ---
+
+## OTP 2.10: what changed from 2.4
+
+- **API:** the REST `/otp/routers/default/plan` endpoint no longer exists (404). Clients use the **GTFS GraphQL API** at `POST /otp/gtfs/v1` (`planConnection`); navigo-api's `OtpClient` does this. `GET /otp` still answers for health checks.
+- **Config format:** `router-config.json` uses nested preferences (`walk.speed`, `walk.reluctance`, `walk.boardCost`, `bicycle.triangle`…). `maxTransfers`, `matchBusRoutesToStreets` and `stationTransfers` were removed. `searchWindow` is **PT30M**: the old PT6H made transit searches take 25–46 s.
+- **Isochrones:** the travel-time/isochrone API was removed; walk-sheds now come from Valhalla.
+- **Graphs:** a 2.4 `graph.obj` can't be loaded by 2.10, so rebuild after upgrading.
+
+## Elevation (DEM)
+
+OTP reads every `*.tif` in `graphs/default/` as elevation data and stores slopes on the street edges. This enables climb figures, bike "Flattest" routing and slope-aware walking and cycling times. Tiles aren't versioned (`.gitignore`).
+
+We use **Copernicus GLO-30** (30 m, free, AWS open data). The four tiles below cover the GTFS area: Nairobi metro (with Thika, Ruiru and Athi River) and the Naivasha–Nakuru corridor.
+
+```bash
+mkdir -p dem-cache && cd dem-cache
+for t in S02_00_E036_00 S02_00_E037_00 S01_00_E036_00 S01_00_E037_00; do
+  n="Copernicus_DSM_COG_10_${t}_DEM"
+  curl -f --retry 5 -o "$n.tif" "https://copernicus-dem-30m.s3.amazonaws.com/$n/$n.tif"
+done
+cp *.tif ../graphs/default/      # ~39 MB each; check sizes, a truncated download breaks the build
+```
+
+Building the Kenya graph with these tiles takes ~16 min and 6 GB of heap.
+
+> **Known limit:** GLO-30 is a *surface* model (it includes buildings and trees), so climbs are overstated in built-up areas. A bare-earth model would fix it; see the API README.
+
+## Valhalla (car routing)
+
+`navigo-valhalla` (`ghcr.io/valhalla/valhalla-scripted:3.9.1`, port 8002, same `navigo_net` network) builds its routing tiles from the same Kenya extract on first start:
+
+```bash
+mkdir -p valhalla && cp graphs/default/kenya-latest.osm.pbf valhalla/
+docker compose up -d valhalla            # first start builds the tiles (several minutes)
+curl http://127.0.0.1:8002/status        # ready when this returns JSON
+```
+
+navigo-api uses it for car routes (`VALHALLA_URL=http://navigo-valhalla:8002`): fastest, real alternatives, and "No tolls" when the fastest uses the Nairobi Expressway. It also serves walk-shed isochrones. To refresh after a new OSM extract, delete `valhalla/valhalla_tiles.tar` and restart the container.
 
 ## Data directory
 
@@ -212,19 +250,19 @@ docker compose --profile build run --rm otp-build
 docker run --rm \
   -e JAVA_OPTS="-Xmx20G -Xms4G -XX:+UseG1GC" \
   -v /var/otp/graphs/default:/var/opentripplanner \
-  opentripplanner/opentripplanner:2.4.0 --build --save
+  opentripplanner/opentripplanner:2.10.0 --build --save
 
 # Option C: Standalone Docker CLI (Windows PowerShell)
 docker run --rm `
   -e JAVA_OPTS="-Xmx20G" `
   -v "C:\navigo\navigo-otp\graphs\default:/var/opentripplanner" `
-  opentripplanner/opentripplanner:2.4.0 --build --save
+  opentripplanner/opentripplanner:2.10.0 --build --save
 
 # Option D: Standalone Docker CLI (Windows cmd.exe)
 docker run --rm ^
   -e JAVA_OPTS="-Xmx20G" ^
   -v "C:\navigo\navigo-otp\graphs\default:/var/opentripplanner" ^
-  opentripplanner/opentripplanner:2.4.0 --build --save
+  opentripplanner/opentripplanner:2.10.0 --build --save
 ```
 
 Watch the output—OTP will log OSM parsing, GTFS parsing for each `.gtfs.zip` archive, street-to-transit graph linkage, and finally `"Graph written"`. The container exits with code `0` on success and writes `graph.obj` to `/var/otp/graphs/default/graph.obj`.
@@ -277,7 +315,7 @@ docker compose up -d otp
 
 # Manual steps — Standalone Docker CLI one-liner (Linux)
 docker stop navigo-otp || true && \
-docker run --rm -e JAVA_OPTS="-Xmx20G" -v /var/otp/graphs/default:/var/opentripplanner opentripplanner/opentripplanner:2.4.0 --build --save && \
+docker run --rm -e JAVA_OPTS="-Xmx20G" -v /var/otp/graphs/default:/var/opentripplanner opentripplanner/opentripplanner:2.10.0 --build --save && \
 docker start navigo-otp
 ```
 
@@ -321,7 +359,7 @@ Every step produces a log entry in `otp_logs` (visible in the console activity l
 ```dotenv
 OTP_DEPLOY_DRIVER=local
 OTP_DATA_PATH=/var/otp/graphs/default
-OTP_BUILD_CMD='docker stop navigo-otp & docker run --rm -e JAVA_OPTS="-Xmx20G" -v "/var/otp/graphs/default:/var/opentripplanner" opentripplanner/opentripplanner:2.4.0 --build --save && docker start navigo-otp'
+OTP_BUILD_CMD='docker stop navigo-otp & docker run --rm -e JAVA_OPTS="-Xmx20G" -v "/var/otp/graphs/default:/var/opentripplanner" opentripplanner/opentripplanner:2.10.0 --build --save && docker start navigo-otp'
 OTP_HEALTH_CHECK_URL=[http://127.0.0.1:8080/otp](http://127.0.0.1:8080/otp)
 OTP_HEALTH_CHECK_RETRIES=30
 OTP_HEALTH_CHECK_DELAY=10
