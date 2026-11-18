@@ -2,7 +2,7 @@
 
 [![OpenTripPlanner](https://img.shields.io/badge/OpenTripPlanner-2.10.0-1565C0?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMSAxNy45M1Y0LjA3YzMuOTQuNDkgNyAzLjg1IDcgNy45M3MtMy4wNiA3LjQ0LTcgNy45M3oiLz48L3N2Zz4=)](https://www.opentripplanner.org)
 [![Docker](https://img.shields.io/badge/Docker-required-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com)
-[![Java](https://img.shields.io/badge/JVM-17%2B%20%C2%B7%2020%20GB%2B%20heap-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org)
+[![Java](https://img.shields.io/badge/JVM-17%2B%20%C2%B7%204%E2%80%936%20GB%20heap-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org)
 [![GTFS](https://img.shields.io/badge/GTFS-Multi--Feed-43A047?style=flat-square)](https://gtfs.org)
 [![OSM](https://img.shields.io/badge/OpenStreetMap-Kenya-7EBC6F?style=flat-square&logo=openstreetmap&logoColor=white)](https://www.openstreetmap.org)
 [![Region](https://img.shields.io/badge/Region-Kenya%20%E2%86%92%20Global-FF6F00?style=flat-square)](https://navigo.co.ke)
@@ -48,8 +48,8 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      # 20GB heap with ZGC ensures sub-millisecond GC pauses under high routing traffic
-      - JAVA_OPTS=-Xmx20G -Xms4G -XX:+UseZGC
+      # From /var/otp/.env; the default fits the 8 GB production server
+      - JAVA_TOOL_OPTIONS=${OTP_JAVA_OPTS:--Xmx4G -Xms1G -XX:+UseG1GC}
     volumes:
       - /var/otp/graphs/default:/var/opentripplanner
     command: --load
@@ -57,9 +57,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 24G
-        reservations:
-          memory: 16G
+          memory: ${OTP_MEM_LIMIT:-5g}
     networks:
       - navigo_net
 
@@ -69,15 +67,15 @@ services:
     container_name: navigo-otp-build
     profiles: ["build"]
     environment:
-      # Generous heap for parsing large national OSM extracts & multi-feed GTFS zips
-      - JAVA_OPTS=-Xmx20G -Xms4G -XX:+UseG1GC
+      # OTP is stopped during a build, so the build may use more
+      - JAVA_TOOL_OPTIONS=${OTP_BUILD_JAVA_OPTS:--Xmx6G -Xms1G -XX:+UseG1GC}
     volumes:
       - /var/otp/graphs/default:/var/opentripplanner
     command: --build --save
     deploy:
       resources:
         limits:
-          memory: 24G
+          memory: ${OTP_BUILD_MEM_LIMIT:-7g}
     networks:
       - navigo_net
 
@@ -240,19 +238,19 @@ docker compose --profile build run --rm otp-build
 
 # Option B: Standalone Docker CLI (Linux server)
 docker run --rm \
-  -e JAVA_OPTS="-Xmx20G -Xms4G -XX:+UseG1GC" \
+  -e JAVA_TOOL_OPTIONS="-Xmx6G -Xms1G -XX:+UseG1GC" \
   -v /var/otp/graphs/default:/var/opentripplanner \
   opentripplanner/opentripplanner:2.10.0 --build --save
 
 # Option C: Standalone Docker CLI (Windows PowerShell)
 docker run --rm `
-  -e JAVA_OPTS="-Xmx20G" `
+  -e JAVA_TOOL_OPTIONS="-Xmx6G" `
   -v "C:\navigo\navigo-otp\graphs\default:/var/opentripplanner" `
   opentripplanner/opentripplanner:2.10.0 --build --save
 
 # Option D: Standalone Docker CLI (Windows cmd.exe)
 docker run --rm ^
-  -e JAVA_OPTS="-Xmx20G" ^
+  -e JAVA_TOOL_OPTIONS="-Xmx6G" ^
   -v "C:\navigo\navigo-otp\graphs\default:/var/opentripplanner" ^
   opentripplanner/opentripplanner:2.10.0 --build --save
 ```
@@ -307,7 +305,7 @@ docker compose up -d otp
 
 # Manual steps — Standalone Docker CLI one-liner (Linux)
 docker stop navigo-otp || true && \
-docker run --rm -e JAVA_OPTS="-Xmx20G" -v /var/otp/graphs/default:/var/opentripplanner opentripplanner/opentripplanner:2.10.0 --build --save && \
+docker run --rm -e JAVA_TOOL_OPTIONS="-Xmx6G" -v /var/otp/graphs/default:/var/opentripplanner opentripplanner/opentripplanner:2.10.0 --build --save && \
 docker start navigo-otp
 ```
 
@@ -363,7 +361,7 @@ Every step produces a log entry in `otp_logs` (visible in the console activity l
 ```dotenv
 OTP_DEPLOY_DRIVER=local
 OTP_DATA_PATH=/var/otp/graphs/default
-OTP_BUILD_CMD='docker stop navigo-otp & docker run --rm -e JAVA_OPTS="-Xmx20G" -v "/var/otp/graphs/default:/var/opentripplanner" opentripplanner/opentripplanner:2.10.0 --build --save && docker start navigo-otp'
+OTP_BUILD_CMD='docker stop navigo-otp & docker run --rm -e JAVA_TOOL_OPTIONS="-Xmx6G" -v "/var/otp/graphs/default:/var/opentripplanner" opentripplanner/opentripplanner:2.10.0 --build --save && docker start navigo-otp'
 OTP_HEALTH_CHECK_URL=[http://127.0.0.1:8080/otp](http://127.0.0.1:8080/otp)
 OTP_HEALTH_CHECK_RETRIES=30
 OTP_HEALTH_CHECK_DELAY=10
@@ -403,9 +401,9 @@ Navigo is built to expand across Kenya and East Africa:
 1. **Adding a new Kenyan city (e.g. Mombasa, Kisumu, Eldoret):** No OSM change is needed because `kenya-latest.osm.pbf` and `kenya-intercity.gtfs.zip` already cover the country. Simply export the new urban feed (e.g. `mombasa-urban.gtfs.zip`) into `/var/otp/graphs/default/` and rebuild.
 2. **Adding a new country:** Download or merge the relevant OSM `.pbf` extract from Geofabrik into `/var/otp/graphs/default/` (remove old standalone `.pbf` files if replaced by a merged regional extract) and drop in the corresponding `*.gtfs.zip` feeds.
 3. **Rebuild the graph:** Run `/var/otp/rebuild.sh` or trigger **Export & Sync** from the console.
-4. **Adjust JVM memory (`JAVA_OPTS`):** Larger OSM extracts, 3D elevation data (GeoTIFF DEM), and high query concurrency require more heap in `/var/otp/docker-compose.yml`:
+4. **Adjust JVM memory:** the image reads `JAVA_TOOL_OPTIONS` (not `JAVA_OPTS`). In production, set it in `/var/otp/.env` (Compose fills `docker-compose.prod.yml` from it): `OTP_JAVA_OPTS` and `OTP_MEM_LIMIT` for serving, `OTP_BUILD_JAVA_OPTS` and `OTP_BUILD_MEM_LIMIT` for a manual `otp-build`. The console's publish builds through `rebuild.sh`, whose heap is `OTP_BUILD_JAVA_OPTS` in the **API's** `.env`. Defaults fit the 8 GB CPX32 (serve 4 GB; build 6 GB, with OTP stopped). Larger extracts, elevation and concurrency need more:
 
-   | Scope / Server Tier | Recommended `JAVA_OPTS` | Notes |
+   | Scope / Server Tier | Recommended options | Notes |
    |---------------------|-------------------------|-------|
    | Single city (Nairobi only) | `-Xmx4G -Xms512m -XX:+UseG1GC` | Fits on 8 GB RAM host |
    | Kenya national (Multi-urban + Intercity) | `-Xmx6G -Xms1G -XX:+UseG1GC` | Fits on 8–16 GB RAM host |
@@ -460,7 +458,7 @@ docker logs navigo-otp
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `OutOfMemoryError` | Heap too small | Increase `JAVA_OPTS=-Xmx20G` in `docker-compose.yml` |
+| `OutOfMemoryError` | Heap too small | Raise `OTP_JAVA_OPTS` (serve) or `OTP_BUILD_JAVA_OPTS` (build), e.g. `-Xmx8G`, within the server's RAM |
 | `graph.obj not found` | Build did not complete | Check build logs; rerun `--build --save` |
 | `Duplicate stop/trip ID` | ID collision across multiple `.gtfs.zip` files | Ensure each zip defines a unique `feed_id` in `feed_info.txt` |
 | `Address already in use: 8080` | Port conflict | `netstat -tulpn \| grep 8080` and kill the process |
