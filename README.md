@@ -311,7 +311,19 @@ docker run --rm -e JAVA_OPTS="-Xmx20G" -v /var/otp/graphs/default:/var/opentripp
 docker start navigo-otp
 ```
 
-`rebuild.sh` handles the sequence atomically: stop serve → build (blocking) → start serve. The `navigo-api` health poller then confirms OTP is accepting requests before marking the sync complete.
+`rebuild.sh` handles the sequence: back up `graph.obj` → stop serve → build → start serve. The `navigo-api` health poller then confirms OTP is accepting requests before marking the publish complete.
+
+How it finds OTP: it reads the **image and host folder of the running `navigo-otp` container** (`docker inspect`) and builds with exactly those, so it works unchanged in production (`/var/otp`), on a development machine (any path, Windows included) and from inside the API's queue container (which has `/var/otp` and the Docker socket mounted). OTP must have been started once (`docker compose up -d otp`).
+
+On a build failure, or when the console cancels the publish (SIGTERM), it removes the build container, **puts the previous graph back and restarts OTP**.
+
+| Variable | Default | |
+|---|---|---|
+| `OTP_DIR` | `/var/otp` | Where this repo is mounted |
+| `OTP_CONTAINER` | `navigo-otp` | The serve container |
+| `OTP_BUILD_JAVA_OPTS` | `-Xmx6G -Xms1G -XX:+UseG1GC` | Heap for the build (Kenya: 6 GB is enough) |
+
+Feeds published from the console are named `navigo-*.gtfs.zip`; each publish replaces all of them. Any other GTFS zip in `graphs/default` is moved to `graphs/default/unmanaged/` by the API before the build (OTP would otherwise load the same routes twice); set `OTP_EXCLUSIVE_FEEDS=false` in the API to keep them.
 
 ---
 
