@@ -1,3 +1,8 @@
+# Production. Heap and memory limits come from /var/otp/.env (Compose reads
+# it for ${…}); the defaults fit the 8 GB Hetzner CPX32 in DEPLOYMENT.md:
+# OTP serves the Kenya graph (with elevation) in a 4 GB heap, and during a
+# rebuild it is stopped, so the build can take 6 GB. On a bigger server, raise
+# them in /var/otp/.env, e.g. OTP_JAVA_OPTS="-Xmx12G -Xms4G -XX:+UseZGC".
 services:
   # ── OpenTripPlanner (serve) ───────────────────────────────────────────────
   otp:
@@ -6,8 +11,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      # 20GB heap with ZGC ensures sub-millisecond GC pauses under high routing traffic
-      - JAVA_TOOL_OPTIONS=-Xmx20G -Xms4G -XX:+UseZGC
+      - JAVA_TOOL_OPTIONS=${OTP_JAVA_OPTS:--Xmx4G -Xms1G -XX:+UseG1GC}
     volumes:
       - /var/otp/graphs/default:/var/opentripplanner
     command: --load
@@ -15,27 +19,27 @@ services:
     deploy:
       resources:
         limits:
-          memory: 24G
-        reservations:
-          memory: 16G
+          memory: ${OTP_MEM_LIMIT:-5g}
     networks:
       - navigo_net
 
   # ── OpenTripPlanner (graph builder, on-demand) ────────────────────────────
+  # The console's publish doesn't use this service: rebuild.sh starts a build
+  # container from the running navigo-otp's image and folder (heap:
+  # OTP_BUILD_JAVA_OPTS in the API's .env). Kept for manual builds.
   otp-build:
     image: opentripplanner/opentripplanner:2.10.0
     container_name: navigo-otp-build
     profiles: ["build"]
     environment:
-      # Generous heap for parsing large national OSM extracts & multi-feed GTFS zips
-      - JAVA_TOOL_OPTIONS=-Xmx20G -Xms4G -XX:+UseG1GC
+      - JAVA_TOOL_OPTIONS=${OTP_BUILD_JAVA_OPTS:--Xmx6G -Xms1G -XX:+UseG1GC}
     volumes:
       - /var/otp/graphs/default:/var/opentripplanner
     command: --build --save
     deploy:
       resources:
         limits:
-          memory: 24G
+          memory: ${OTP_BUILD_MEM_LIMIT:-7g}
     networks:
       - navigo_net
 
