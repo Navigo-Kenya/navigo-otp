@@ -48,8 +48,8 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      # From /var/otp/.env; the default fits the 8 GB production server
-      - JAVA_TOOL_OPTIONS=${OTP_JAVA_OPTS:--Xmx4G -Xms1G -XX:+UseG1GC}
+      # From /var/otp/.env; the default fits the 32 GB production server
+      - JAVA_TOOL_OPTIONS=${OTP_JAVA_OPTS:--Xmx8G -Xms2G -XX:+UseG1GC}
     volumes:
       - /var/otp/graphs/default:/var/opentripplanner
     command: --load
@@ -401,14 +401,14 @@ Navigo is built to expand across Kenya and East Africa:
 1. **Adding a new Kenyan city (e.g. Mombasa, Kisumu, Eldoret):** No OSM change is needed because `kenya-latest.osm.pbf` and `kenya-intercity.gtfs.zip` already cover the country. Simply export the new urban feed (e.g. `mombasa-urban.gtfs.zip`) into `/var/otp/graphs/default/` and rebuild.
 2. **Adding a new country:** Download or merge the relevant OSM `.pbf` extract from Geofabrik into `/var/otp/graphs/default/` (remove old standalone `.pbf` files if replaced by a merged regional extract) and drop in the corresponding `*.gtfs.zip` feeds.
 3. **Rebuild the graph:** Run `/var/otp/rebuild.sh` or trigger **Export & Sync** from the console.
-4. **Adjust JVM memory:** the image reads `JAVA_TOOL_OPTIONS` (not `JAVA_OPTS`). In production, set it in `/var/otp/.env` (Compose fills `docker-compose.prod.yml` from it): `OTP_JAVA_OPTS` and `OTP_MEM_LIMIT` for serving, `OTP_BUILD_JAVA_OPTS` and `OTP_BUILD_MEM_LIMIT` for a manual `otp-build`. The console's publish builds through `rebuild.sh`, whose heap is `OTP_BUILD_JAVA_OPTS` in the **API's** `.env`. Defaults fit the 8 GB CPX32 (serve 4 GB; build 6 GB, with OTP stopped). Larger extracts, elevation and concurrency need more:
+4. **Adjust JVM memory:** the image reads `JAVA_TOOL_OPTIONS` (not `JAVA_OPTS`). In production, set it in `/var/otp/.env` (Compose fills `docker-compose.prod.yml` from it): `OTP_JAVA_OPTS` and `OTP_MEM_LIMIT` for serving, `OTP_BUILD_JAVA_OPTS` and `OTP_BUILD_MEM_LIMIT` for a manual `otp-build`. The console's publish builds through `rebuild.sh`, whose heap is `OTP_BUILD_JAVA_OPTS` in the **API's** `.env`. Defaults fit the 32 GB OVH server (serve 8 GB; build 12 GB, with OTP stopped). `rebuild.sh` falls back to a 6 GB build heap when `OTP_BUILD_JAVA_OPTS` is unset, which suits a laptop. Larger extracts, elevation and concurrency need more:
 
    | Scope / Server Tier | Recommended options | Notes |
    |---------------------|-------------------------|-------|
    | Single city (Nairobi only) | `-Xmx4G -Xms512m -XX:+UseG1GC` | Fits on 8 GB RAM host |
    | Kenya national (Multi-urban + Intercity) | `-Xmx6G -Xms1G -XX:+UseG1GC` | Fits on 8–16 GB RAM host |
    | East Africa multi-country | `-Xmx10G -Xms2G -XX:+UseG1GC` | Requires 16 GB+ RAM host |
-   | High-concurrency / 32 GB RAM server (Sequential build) | `-Xmx20G -Xms4G -XX:+UseZGC` | Stop `otp` before running `otp-build` so only one 20 GB JVM runs at a time (leaves ~12 GB for OS & off-heap overhead) |
+   | Production, 32 GB OVH server (the defaults) | serve `-Xmx8G -Xms2G`, build `-Xmx12G -Xms2G` (`-XX:+UseG1GC`) | OTP stops serving during a build, so the two heaps never overlap; PostgreSQL, Redis, PHP and Valhalla keep their share (navigo-api `DEPLOYMENT.md` §2) |
 
 5. **Separate instances per region** _(optional)_: For high-traffic multi-country deployments, run one OTP container per country behind a routing proxy that selects the instance based on origin/destination coordinates.
 
@@ -416,7 +416,7 @@ Navigo is built to expand across Kenya and East Africa:
 
 ## Production deployment
 
-### Recommended server spec (32 GB RAM Hetzner CPX32 / CCX33)
+### Recommended server spec (production: OVH, 32 GB RAM)
 
 | Component | Minimum | Recommended | High-Capacity |
 |-----------|---------|-------------|---------------|
